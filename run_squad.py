@@ -30,6 +30,9 @@ import six
 import tensorflow as tf
 
 flags = tf.flags
+#saver = tf.compat.v1.train.Saver()
+#sess = tf.Session()
+#saver.restore(sess, './wwm/bert_model.ckpt')
 
 FLAGS = flags.FLAGS
 
@@ -75,7 +78,7 @@ flags.DEFINE_integer(
     "take between chunks.")
 
 flags.DEFINE_integer(
-    "max_query_length", 64,
+    "max_query_length", 80,
     "The maximum number of tokens for the question. Questions longer than "
     "this will be truncated to this length.")
 
@@ -110,7 +113,7 @@ flags.DEFINE_integer(
     "nbest_predictions.json output file.")
 
 flags.DEFINE_integer(
-    "max_answer_length", 30,
+    "max_answer_length", 250,
     "The maximum length of an answer that can be generated. This is needed "
     "because the start and end predictions are not conditioned on one another.")
 
@@ -150,7 +153,7 @@ flags.DEFINE_bool(
     "If true, the SQuAD examples contain some that do not have an answer.")
 
 flags.DEFINE_float(
-    "null_score_diff_threshold", 0.0,
+    "null_score_diff_threshold", 0.5,
     "If null_score - best_non_null is greater than the threshold predict null.")
 
 
@@ -226,83 +229,46 @@ class InputFeatures(object):
 
 def read_squad_examples(input_file, is_training):
   """Read a SQuAD json file into a list of SquadExample."""
-  with tf.gfile.Open(input_file, "r") as reader:
-    input_data = json.load(reader)["data"]
-
-  def is_whitespace(c):
-    if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
-      return True
-    return False
-
   examples = []
-  for entry in input_data:
-    for paragraph in entry["paragraphs"]:
-      paragraph_text = paragraph["context"]
-      doc_tokens = []
-      char_to_word_offset = []
-      prev_is_whitespace = True
-      for c in paragraph_text:
-        if is_whitespace(c):
-          prev_is_whitespace = True
-        else:
-          if prev_is_whitespace:
-            doc_tokens.append(c)
-          else:
-            doc_tokens[-1] += c
-          prev_is_whitespace = False
-        char_to_word_offset.append(len(doc_tokens) - 1)
-
-      for qa in paragraph["qas"]:
-        qas_id = qa["id"]
-        question_text = qa["question"]
-        start_position = None
-        end_position = None
-        orig_answer_text = None
-        is_impossible = False
-        if is_training:
-
-          if FLAGS.version_2_with_negative:
-            is_impossible = qa["is_impossible"]
-          if (len(qa["answers"]) != 1) and (not is_impossible):
-            raise ValueError(
-                "For training, each question should have exactly 1 answer.")
-          if not is_impossible:
-            answer = qa["answers"][0]
-            orig_answer_text = answer["text"]
-            answer_offset = answer["answer_start"]
-            answer_length = len(orig_answer_text)
-            start_position = char_to_word_offset[answer_offset]
-            end_position = char_to_word_offset[answer_offset + answer_length -
-                                               1]
-            # Only add answers where the text can be exactly recovered from the
-            # document. If this CAN'T happen it's likely due to weird Unicode
-            # stuff so we will just skip the example.
-            #
-            # Note that this means for training mode, every example is NOT
-            # guaranteed to be preserved.
-            actual_text = " ".join(
-                doc_tokens[start_position:(end_position + 1)])
-            cleaned_answer_text = " ".join(
-                tokenization.whitespace_tokenize(orig_answer_text))
-            if actual_text.find(cleaned_answer_text) == -1:
-              tf.logging.warning("Could not find answer: '%s' vs. '%s'",
-                                 actual_text, cleaned_answer_text)
-              continue
-          else:
-            start_position = -1
-            end_position = -1
-            orig_answer_text = ""
-
-        example = SquadExample(
-            qas_id=qas_id,
-            question_text=question_text,
-            doc_tokens=doc_tokens,
-            orig_answer_text=orig_answer_text,
-            start_position=start_position,
-            end_position=end_position,
-            is_impossible=is_impossible)
-        examples.append(example)
-
+  doc_tokens = []
+  with open(input_file,"r",encoding="utf-8") as f:
+      js_str = f.read()
+  train_dict = json.loads(js_str)
+  data = train_dict['data'][0]
+  paragraphs = data['paragraphs']
+  #print(" ".join(doc_tokens))
+  #prev_is_whitespace = True
+  for paragraph in paragraphs:
+      paragraph_text = paragraph['context']
+      for i in range(0,len(paragraph_text)):
+          doc_tokens.append(paragraph_text[i])
+      print(doc_tokens)
+      qas = paragraph['qas']
+      for qa in qas:
+          qa_id = qa['id']
+          question = qa['question']
+          print(question)
+          answers = qa['answers']
+          for answer in answers:
+              print(answer['text'])
+              answer_offset = answer["answer_start"]
+              print("answer_offset: " + str(answer_offset))
+              orig_answer_text = answer['text']
+              answer_length = len(orig_answer_text)
+              print("answer_length: " + str(answer_length))
+              start_position = answer_offset
+              print("start_position: " +  str(start_position))
+              end_position = answer_offset + answer_length + 1
+              print("end_position: " + str(end_position))
+              example = SquadExample(
+                  qas_id=qa_id,
+                  question_text=question,
+                  doc_tokens=doc_tokens,
+                  orig_answer_text=orig_answer_text,
+                  start_position=start_position,
+                  end_position=end_position,
+                  is_impossible=False)
+              examples.append(example)
   return examples
 
 
@@ -914,14 +880,14 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
     all_nbest_json[example.qas_id] = nbest_json
 
   with tf.gfile.GFile(output_prediction_file, "w") as writer:
-    writer.write(json.dumps(all_predictions, indent=4) + "\n")
+    writer.write(json.dumps(all_predictions, indent=4,ensure_ascii=False) + "\n")
 
   with tf.gfile.GFile(output_nbest_file, "w") as writer:
-    writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
+    writer.write(json.dumps(all_nbest_json, indent=4,ensure_ascii=False) + "\n")
 
   if FLAGS.version_2_with_negative:
     with tf.gfile.GFile(output_null_log_odds_file, "w") as writer:
-      writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
+      writer.write(json.dumps(scores_diff_json, indent=4,ensure_ascii=False) + "\n")
 
 
 def get_final_text(pred_text, orig_text, do_lower_case):
