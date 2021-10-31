@@ -244,31 +244,54 @@ def read_squad_examples(input_file, is_training):
           doc_tokens.append(paragraph_text[i])
       print(doc_tokens)
       qas = paragraph['qas']
-      for qa in qas:
-          qa_id = qa['id']
-          question = qa['question']
-          print(question)
-          answers = qa['answers']
-          for answer in answers:
-              print(answer['text'])
-              answer_offset = answer["answer_start"]
-              print("answer_offset: " + str(answer_offset))
-              orig_answer_text = answer['text']
-              answer_length = len(orig_answer_text)
-              print("answer_length: " + str(answer_length))
-              start_position = answer_offset
-              print("start_position: " +  str(start_position))
-              end_position = answer_offset + answer_length + 1
-              print("end_position: " + str(end_position))
-              example = SquadExample(
-                  qas_id=qa_id,
-                  question_text=question,
-                  doc_tokens=doc_tokens,
-                  orig_answer_text=orig_answer_text,
-                  start_position=start_position,
-                  end_position=end_position,
-                  is_impossible=False)
-              examples.append(example)
+      if is_training:
+        for qa in qas:
+            qa_id = qa['id']
+            question = qa['question']
+            start_position = None
+            end_position = None
+            orig_answer_text = None
+            is_impossible = False
+            print(question)
+            answers = qa['answers']
+            for answer in answers:
+                print(answer['text'])
+                answer_offset = answer["answer_start"]
+                print("answer_offset: " + str(answer_offset))
+                orig_answer_text = answer['text']
+                answer_length = len(orig_answer_text)
+                print("answer_length: " + str(answer_length))
+                start_position = answer_offset
+                print("start_position: " +  str(start_position))
+                end_position = answer_offset + answer_length + 1
+                print("end_position: " + str(end_position))
+                example = SquadExample(
+                    qas_id=qa_id,
+                    question_text=question,
+                    doc_tokens=doc_tokens,
+                    orig_answer_text=orig_answer_text,
+                    start_position=start_position,
+                    end_position=end_position,
+                    is_impossible=is_impossible)
+                examples.append(example)
+      else:
+        for qa in qas:
+            qa_id = qa['id']
+            question = qa['question']
+            start_position = None
+            end_position = None
+            orig_answer_text = None
+            is_impossible = False
+            example = SquadExample(
+                      qas_id=qa_id,
+                      question_text=question,
+                      doc_tokens=doc_tokens,
+                      orig_answer_text=orig_answer_text,
+                      start_position=start_position,
+                      end_position=end_position,
+                      is_impossible=is_impossible)
+            examples.append(example)
+
   return examples
 
 
